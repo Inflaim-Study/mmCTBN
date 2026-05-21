@@ -21,7 +21,7 @@ Description: A unified framework for fitting Continuous-Time Bayesian Networks
     cross-validation, and a rich suite of inference and visualisation
     utilities (network graphs, risk trajectories, synergistic
     interaction plots, time-dependent AUC, Brier scores).
-License: MIT + file LICENSE
+License: GPL3 + file LICENSE
 Encoding: UTF-8
 Depends:
     R (>= 4.0.0)
