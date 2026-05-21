@@ -69,8 +69,8 @@ fit <- ctbn_fit(DT,
                 method            = "map",
                 prior             = "spike_slab",
                 max_order         = 2,
-                fixed_covs        = c("age", "sex_male"),
-                time_varying_covs = c("smk_current", "smk_former"),
+                fixed_covs        = c("sex_male"),
+                time_varying_covs = c("age","smk_current", "smk_former"),
                 parallel          = TRUE)
 summary(fit)
 plot(fit, type = "network")
