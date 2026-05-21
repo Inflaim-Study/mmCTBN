@@ -1,0 +1,62 @@
+Package: mmCTBN
+Type: Package
+Title: Continuous-Time Bayesian Networks for Multimorbidity in Electronic Health Records
+Version: 0.1.0
+Authors@R: 
+    person(given = "Oyebayo Ridwan",
+           family = "Olaniran",
+           role = c("aut", "cre"),
+           email = "ridwan.olaniran@lshtm.ac.uk",
+           comment = c(ORCID = "0000-0001-7342-8639"))
+Maintainer: Oyebayo Ridwan Olaniran <ridwan.olaniran@lshtm.ac.uk>
+Description: A unified framework for fitting Continuous-Time Bayesian Networks
+    (CTBNs) to multimorbidity data from Electronic Health Records (EHRs).
+    The package implements both fully Bayesian (Stan / MCMC) and fast
+    Maximum-A-Posteriori (MAP / Laplace) estimators for the same panel-data
+    Poisson likelihood, with four prior families: spike-and-slab,
+    structured (order-penalised normal), Bayesian LASSO, and regularised
+    horseshoe. It supports arbitrary network sizes and interaction orders
+    (main effects up to 5-way interactions), generic data simulation for
+    any number of nodes, parallel implementation across nodes, K-fold
+    cross-validation, and a rich suite of inference and visualisation
+    utilities (network graphs, risk trajectories, synergistic
+    interaction plots, time-dependent AUC, Brier scores).
+License: MIT + file LICENSE
+Encoding: UTF-8
+Depends:
+    R (>= 4.0.0)
+Imports:
+    data.table,
+    Matrix,
+    stats,
+    utils,
+    methods,
+    parallel
+Suggests:
+    rstan (>= 2.21.0),
+    future,
+    future.apply,
+    foreach,
+    doParallel,
+    progressr,
+    ggplot2,
+    ggraph,
+    igraph,
+    pROC,
+    timeROC,
+    survival,
+    R6,
+    jsonlite,
+    crayon,
+    callr,
+    scales,
+    patchwork,
+    viridisLite,
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0)
+RoxygenNote: 7.3.1
+VignetteBuilder: knitr
+URL: https://github.com/InflAim-Study/mmCTBN
+BugReports: https://github.com/InflAim-Study/mmCTBN/issues
+Config/testthat/edition: 3

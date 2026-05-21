@@ -1,0 +1,246 @@
+---
+title: "Getting started with mmCTBN"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started with mmCTBN}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment  = "#>",
+  eval     = FALSE
+)
+```
+
+# Overview
+
+`mmCTBN` ("multimorbidity continuous-time Bayesian networks") is a unified
+framework for fitting CTBN models to longitudinal Electronic Health Record
+data. It supports **five interchangeable estimation backends** under one
+common interface (`ctbn_fit(..., method = ...)`):
+
+  * **`map`** — fast regularised Poisson MAP with four prior families.
+  * **`stan`** — full Bayesian MCMC.
+  * **`classic`** — Nodelman et al. (2002) closed-form MLE per parent
+    configuration (no covariates).
+  * **`fctbn`** — Faruqui et al. (2021) Functional CTBN: Poisson
+    regression with adaptive group lasso and multiplicative parent
+    effects, optimised with FISTA + Gaussian-mixture early stop.
+  * **`cph`** — Guillamet et al. (2025) CTBN-CPH: classical baseline
+    intensities modulated per directed edge by Cox proportional-hazards
+    regressions, yielding patient-specific rates.
+
+The package is designed for high-dimensional multimorbidity studies
+where one cares not just about pairwise associations but also about
+**synergistic 2-, 3-, 4-, and 5-way interactions** between conditions
+(via `method = "map"` or `"stan"`).
+
+```{r}
+library(mmCTBN)
+library(data.table)
+```
+
+
+# 1. Simulating data
+
+Generate a 5-node random network with 2-way and 3-way interactions:
+
+```{r}
+set.seed(2026)
+nw <- make_random_network(n_nodes = 5, seed = 2026)
+DT <- simulate_ctbn_data(
+  network            = nw,
+  n_patients         = 1000,
+  t_horizon          = 10,
+  dt_step            = 1,
+  interaction_order  = 3,         # 1 = mains only, ..., 5 = up to 5-way
+  parallel           = TRUE,
+  n_cores            = 4)
+head(DT)
+```
+
+For the canonical 10-condition multimorbidity benchmark used in the
+original paper, use:
+
+```{r}
+nw10 <- make_default_network()
+DT10 <- simulate_ctbn_data(network = nw10, n_patients = 2000,
+                           interaction_order = 2)
+```
+
+
+# 2. Fast MAP fit
+
+```{r}
+fit_map <- ctbn_fit(
+  DT,
+  method            = "map",
+  prior             = "spike_slab",
+  max_order         = 2,
+  fixed_covs        = c("age", "sex_male"),
+  time_varying_covs = c("smk_current", "smk_former"),
+  parallel          = TRUE)
+
+summary(fit_map)
+coef(fit_map, type = "beta")
+plot(fit_map, type = "network")
+plot(fit_map, type = "heatmap")
+```
+
+
+# 3. Full Bayesian fit
+
+When you need credible intervals, posterior predictive checks, or full
+uncertainty quantification, switch backends without changing any other
+code:
+
+```{r}
+fit_stan <- ctbn_fit(
+  DT,
+  method            = "stan",
+  prior             = "horseshoe",
+  max_order         = 2,
+  fixed_covs        = c("age", "sex_male"),
+  time_varying_covs = c("smk_current", "smk_former"),
+  iter              = 2000,
+  chains            = 4,
+  cores             = 4)
+```
+
+
+# 4. Inference
+
+Cumulative incidence at a 5-year horizon for any target:
+
+```{r}
+patient0 <- DT[eid == DT$eid[1]]
+F5 <- compute_F_m(fit_map, target = "C1", patient_dt = patient0, tau = 5)
+```
+
+Synergistic interaction decomposition:
+
+```{r}
+syn <- compute_interaction_effects(fit_map, DT, tau = 5,
+                                    pip_thresh = 0.5)
+plot_synergy_forest(syn, top_n = 15)
+```
+
+
+# 5. Cross-validation
+
+```{r}
+fit_fns <- list(
+  map_ss = function(dt, ...)
+    ctbn_map(dt, prior = "spike_slab", max_order = 2, parallel = FALSE,
+             verbose = FALSE, ...),
+  map_hs = function(dt, ...)
+    ctbn_map(dt, prior = "horseshoe", max_order = 2, parallel = FALSE,
+             verbose = FALSE, ...))
+
+future::plan(future::multisession, workers = 4)
+cv <- ctbn_cv(
+  DT_wide   = DT,
+  fit_fns   = fit_fns,
+  k_folds   = 3,
+  eval_times = c(2, 5, 8),
+  fixed_covs = c("age", "sex_male"))
+summarise_cv(cv)
+plot_tdauc(cv)
+```
+
+
+# 6. Recovery / selection metrics (simulation studies)
+
+If the true network is known (e.g. from `make_random_network`), recovery
+quality can be evaluated with `compute_recovery_metrics()` and
+`compute_selection_metrics()`. See `?compute_recovery_metrics` for
+details.
+
+
+# 7. Classical CTBN (Nodelman 2002)
+
+The original CTBN has no covariate channel and estimates rates by
+closed-form MLE per parent configuration. Useful as a sanity check and
+for small problems with strong topology priors.
+
+```{r}
+fit_classic <- ctbn_fit(
+  DT,
+  method      = "classic",
+  parents     = list(),       # default: every other condition is a parent
+  max_parents = 3,
+  verbose     = FALSE)
+summary(fit_classic)
+plot(fit_classic, type = "network")
+```
+
+
+# 8. Functional CTBN (Faruqui 2021)
+
+Poisson regression with adaptive group lasso and multiplicative parent
+effects. Each (parent, target) edge is a *group* in the FISTA solver;
+sparsity comes from group-soft-thresholding. The GMM-based early stop
+snaps near-zero groups to exactly zero after a warmup window, saving
+many iterations.
+
+```{r}
+fit_fctbn <- ctbn_fit(
+  DT,
+  method            = "fctbn",
+  fixed_covs        = c("age", "sex_male"),
+  time_varying_covs = c("smk_current", "smk_former"),
+  lambda            = 1e-2,    # group-lasso strength
+  max_iter          = 20000,
+  gmm_stop          = TRUE,
+  gmm_warmup        = 3000)
+summary(fit_fctbn)
+plot(fit_fctbn, type = "heatmap")
+```
+
+
+# 9. CTBN-CPH (Guillamet 2025)
+
+Hybrid two-stage model. First, baseline intensities $\lambda^0_{m|u}$
+are estimated by the classical CTBN. Second, for every directed edge
+$j \to m$ a Cox proportional-hazards regression on patient covariates
+yields hazard ratios $\exp(\sum_l \beta_l c_l)$ which modulate the
+baseline rate at inference time. Covariates with Cox p-values above
+`alpha` are gated out.
+
+```{r}
+fit_cph <- ctbn_fit(
+  DT,
+  method            = "cph",
+  fixed_covs        = c("age", "sex_male"),
+  time_varying_covs = c("smk_current", "smk_former"),
+  max_parents       = 3,
+  alpha             = 0.05)
+summary(fit_cph)
+# Per-edge Cox coefficients
+str(fit_cph$beta_cov, max.level = 2)
+```
+
+
+# 10. Cross-validation across methods
+
+The CV harness works uniformly across all five backends: just hand
+`ctbn_cv()` a list of fitters.
+
+```{r}
+fit_fns <- list(
+  map     = function(dt, ...) ctbn_map    (dt, prior = "spike_slab",
+                                            max_order = 2, ...),
+  classic = function(dt, ...) ctbn_classic(dt, max_parents = 2, ...),
+  fctbn   = function(dt, ...) ctbn_fctbn  (dt, fixed_covs = c("age"),
+                                            lambda = 1e-2,
+                                            max_iter = 5000, ...),
+  cph     = function(dt, ...) ctbn_cph    (dt, fixed_covs = c("age"),
+                                            max_parents = 2, ...))
+future::plan(future::multisession, workers = 4)
+cv <- ctbn_cv(DT, fit_fns = fit_fns, k_folds = 3,
+              eval_times = c(2, 5, 8))
+plot_tdauc(cv)
+```
