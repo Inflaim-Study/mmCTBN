@@ -11,7 +11,7 @@ longitudinal Electronic Health Record (EHR) data.
 
 Most existing CTBN tools handle only main effects and assume a
 fixed number of nodes. `mmCTBN` is designed for **modern multimorbidity
-research** and ships with **five interchangeable estimation backends**
+research** and ships with **five interchangeable estimation methods**
 under one common API:
 
   * **`map`** — fast regularised Poisson MAP (L-BFGS-B + Laplace SEs),
