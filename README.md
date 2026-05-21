@@ -9,7 +9,7 @@ longitudinal Electronic Health Record (EHR) data.
 
 ## Why `mmCTBN`?
 
-Most existing CTBN tools handle only pairwise associations and assume a
+Most existing CTBN tools handle only main effects and assume a
 fixed number of nodes. `mmCTBN` is designed for **modern multimorbidity
 research** and ships with **five interchangeable estimation backends**
 under one common API:
