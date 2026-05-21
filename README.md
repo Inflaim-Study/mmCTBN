@@ -122,4 +122,4 @@ methodology papers and this package. See `citation("mmCTBN")`.
 
 ## License
 
-MIT.
+GPL3.
